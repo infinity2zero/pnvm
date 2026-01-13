@@ -3,8 +3,7 @@
 .pnenv-version
 .pnenv-aliases
 
-# Release packages
-release/
+# Release temp files (but commit release/ folder)
 release-temp/
 
 # OS files

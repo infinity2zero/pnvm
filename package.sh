@@ -28,16 +28,16 @@ cd ..
 rm -rf "$TEMP_DIR"
 echo "✓ Created: pnvm-$VERSION-universal.zip"
 
-# Create Unix-only package
-echo "Creating Unix package (macOS/Linux)..."
+# Create Unix/macOS package (same script for both)
+echo "Creating Unix/macOS package..."
 mkdir -p "$TEMP_DIR/pnvm-$VERSION"
 cp pnvm README.md LICENSE "$TEMP_DIR/pnvm-$VERSION/"
 chmod +x "$TEMP_DIR/pnvm-$VERSION/pnvm"
 cd "$TEMP_DIR"
-zip -r "../$RELEASE_DIR/pnvm-$VERSION-unix.zip" "pnvm-$VERSION" > /dev/null
+zip -r "../$RELEASE_DIR/pnvm-$VERSION-unix-macos.zip" "pnvm-$VERSION" > /dev/null
 cd ..
 rm -rf "$TEMP_DIR"
-echo "✓ Created: pnvm-$VERSION-unix.zip"
+echo "✓ Created: pnvm-$VERSION-unix-macos.zip"
 
 # Create Windows-only package
 echo "Creating Windows package..."

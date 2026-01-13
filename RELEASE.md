@@ -11,7 +11,7 @@
    ```
 
 2. GitHub Actions will automatically:
-   - Package the release (universal, unix, windows)
+   - Package the release (universal, unix-macos, windows)
    - Create a GitHub release
    - Upload the zip files as release assets
    - Track download counts automatically
@@ -25,7 +25,7 @@
 
 2. This creates zip files in the `release/` directory:
    - `pnvm-v2.0.0-universal.zip` (all platforms)
-   - `pnvm-v2.0.0-unix.zip` (macOS/Linux only)
+   - `pnvm-v2.0.0-unix-macos.zip` (Unix/macOS - same package for both)
    - `pnvm-v2.0.0-windows.zip` (Windows only)
 
 3. Create a GitHub release:
@@ -63,7 +63,7 @@ curl https://api.github.com/repos/yourusername/pnvm/releases/latest
 
 Download the appropriate package for your OS:
 - **Universal**: [pnvm-v2.0.0-universal.zip](link)
-- **Unix**: [pnvm-v2.0.0-unix.zip](link)
+- **Unix/macOS**: [pnvm-v2.0.0-unix-macos.zip](link)
 - **Windows**: [pnvm-v2.0.0-windows.zip](link)
 
 ## Usage

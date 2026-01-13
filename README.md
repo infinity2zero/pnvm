@@ -20,10 +20,14 @@ A portable, zero-admin Node.js version manager that works entirely within your p
 
 ### Option 1: Download from GitHub Releases (Recommended)
 
-Download the appropriate package for your OS from [GitHub Releases](https://github.com/yourusername/pnvm/releases):
+Download the appropriate package for your OS:
 
+- **From GitHub Releases**: [Releases page](https://github.com/infinity2zero/pnvm/releases)
+- **Direct download from repo**: [release folder](https://github.com/infinity2zero/pnvm/tree/main/release)
+
+Available packages:
 - **Universal** (all platforms): `pnvm-v2.0.0-universal.zip`
-- **Unix only** (macOS/Linux): `pnvm-v2.0.0-unix.zip`
+- **Unix/macOS** (same package for both): `pnvm-v2.0.0-unix-macos.zip`
 - **Windows only**: `pnvm-v2.0.0-windows.zip`
 
 Extract and copy the script(s) to your project root.
@@ -69,13 +73,13 @@ pnvm help
 pnvm init
 ```
 
-**Note**: On Windows, `pnv.cmd` works directly without `./` because Windows automatically finds `.bat`/`.cmd` files in the current directory. On Unix, you need `./pnv` unless you set up a shell function (see Advanced Usage below).
+**Note**: On Windows, `pnvm.cmd` works directly without `./` because Windows automatically finds `.bat`/`.cmd` files in the current directory. On Unix, you need `./pnvm` unless you source it (see Advanced Usage below).
 
 ## Commands
 
 ### `pnvm help` or `pnvm init [version]`
 
-Show help or initialize pnv in your project. If no version is specified, pnv will:
+Show help or initialize pnvm in your project. If no version is specified, pnvm will:
 1. Try to detect the version from `package.json` `engines.node` field
 2. Prompt you to enter a version (defaults to 20.0.0)
 
@@ -94,9 +98,9 @@ pnvm init 18.17.0
 
 ### `pnvm use <version> [--no-install]`
 
-Switch to a different Node.js version. If the version isn't installed, you'll need to run `pnv init <version>` first.
+Switch to a different Node.js version. If the version isn't installed, you'll need to run `pnvm init <version>` first.
 
-By default, `pnv use` will automatically run `npm install` if:
+By default, `pnvm use` will automatically run `npm install` if:
 - `node_modules` doesn't exist, or
 - `package.json` is newer than `node_modules`
 
@@ -293,7 +297,7 @@ pnvm uses a shared cache to avoid re-downloading Node.js versions across project
 - **Windows**: `%USERPROFILE%\.pnenv\cache\`
 
 When you install a Node.js version:
-1. pnv checks the shared cache first
+1. pnvm checks the shared cache first
 2. If found, copies from cache (much faster)
 3. If not found, downloads and stores in both project cache and shared cache
 
@@ -426,8 +430,8 @@ chmod +x pnvm
 
 ## Comparison with nvm
 
-| Feature | nvm | pnenv |
-|---------|-----|-------|
+| Feature | nvm | pnvm |
+|---------|-----|------|
 | Admin rights required | Sometimes | Never |
 | System-wide installation | Yes | No |
 | PATH modification | Global | Per-command |
@@ -452,11 +456,11 @@ chmod +x pnvm
 ## Download Statistics
 
 GitHub automatically tracks download counts for each release. View statistics at:
-- [GitHub Releases](https://github.com/yourusername/pnvm/releases)
+- [GitHub Releases](https://github.com/infinity2zero/pnvm/releases)
 
 Each release shows download counts for:
 - Universal package (all platforms)
-- Unix package (macOS/Linux)
+- Unix/macOS package (same for both)
 - Windows package
 
 ## License
@@ -466,24 +470,3 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Contributing
 
 Feel free to submit issues or improvements. This tool is designed to be simple and portable.
-
-## Download Statistics
-
-GitHub automatically tracks download counts for each release. View statistics at:
-- [GitHub Releases](https://github.com/yourusername/pnvm/releases)
-
-Each release shows download counts for:
-- Universal package (all platforms)
-- Unix package (macOS/Linux)
-- Windows package
-
-## License
-
-MIT License - see [LICENSE](LICENSE) file for details.
-
-## Version History
-
-- **v2.0.0**: Renamed to `pnvm` (Per-project Node Version Manager), removed backward compatibility wrappers
-- **v1.1.0**: `pnv` as main entry point, Windows direct execution support
-- **v1.0.0**: Initial cross-platform release with all features
-- **v0.4.0**: Original Windows-only version
