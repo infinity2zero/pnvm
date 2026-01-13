@@ -1,0 +1,640 @@
+#!/bin/bash
+# ============================================================
+# pnvm - per-project Node.js version manager (Unix)
+# Version: v2.0.0
+# Per-project Node Version Manager (like nvm, but per-project)
+# ============================================================
+
+# Universal sourcing detection - works in both bash and zsh
+SOURCED=0
+SCRIPT_PATH=""
+
+# Method 1: bash - BASH_SOURCE[0] differs from $0 when sourced
+if [ -n "${BASH_SOURCE[0]:-}" ] 2>/dev/null; then
+    if [ "${BASH_SOURCE[0]}" != "${0}" ] 2>/dev/null; then
+        SOURCED=1
+    fi
+    SCRIPT_PATH="${BASH_SOURCE[0]}"
+# Method 2: zsh - detect sourcing more reliably
+elif [ -n "${ZSH_VERSION:-}" ]; then
+    # In zsh, use ${(%):-%x} to get the file being sourced (works when sourced)
+    # This is the most reliable way in zsh
+    eval 'ZSH_SCRIPT_PATH="${(%):-%x}"' 2>/dev/null
+    if [ -n "$ZSH_SCRIPT_PATH" ] && [ -f "$ZSH_SCRIPT_PATH" ]; then
+        SCRIPT_PATH="$ZSH_SCRIPT_PATH"
+        # If we got a path via %x, we're definitely being sourced
+        SOURCED=1
+    # Fallback: check $0 - if it's "zsh" or similar, we're likely sourced
+    elif [ "$0" = "zsh" ] || [ "$0" = "-zsh" ] || [ "$0" = "-/bin/zsh" ]; then
+        # $0 is the shell name - we're being sourced, find the script
+        if [ -f "./pnvm" ]; then
+            SCRIPT_PATH="./pnvm"
+            SOURCED=1
+        else
+            SCRIPT_PATH="$0"
+            SOURCED=0
+        fi
+    else
+        # $0 is a script path - we're being executed
+        SCRIPT_PATH="$0"
+        SOURCED=0
+    fi
+else
+    SCRIPT_PATH="$0"
+fi
+
+# Fallback: ensure SCRIPT_PATH is set and valid
+if [ -z "$SCRIPT_PATH" ] || ([ "$SCRIPT_PATH" != "./pnvm" ] && [ ! -f "$SCRIPT_PATH" ]); then
+    # Try to find script in current directory
+    if [ -f "./pnvm" ]; then
+        SCRIPT_PATH="./pnvm"
+        # If we couldn't detect sourcing before but script exists, assume sourced in zsh
+        if [ -n "${ZSH_VERSION:-}" ] && [ "$SOURCED" = "0" ]; then
+            SOURCED=1
+        fi
+    else
+        SCRIPT_PATH="$0"
+    fi
+fi
+
+# If script is being sourced, define the function and return
+if [ "${SOURCED:-0}" = "1" ]; then
+    # Script is being sourced - define pnvm function
+    pnvm() {
+        local dir="$PWD"
+        local pnvm_script
+        
+        # Search up the directory tree for pnvm script
+        while [ "$dir" != "/" ]; do
+            if [ -f "$dir/pnvm" ] && [ -x "$dir/pnvm" ]; then
+                pnvm_script="$dir/pnvm"
+                break
+            fi
+            dir="$(dirname "$dir")"
+        done
+        
+        if [ -z "$pnvm_script" ]; then
+            echo "pnvm: No pnvm script found in current or parent directories." >&2
+            return 1
+        fi
+        
+        "$pnvm_script" "$@"
+    }
+    
+    echo "✓ pnvm function loaded. You can now use: pnvm help"
+    # When sourced, stop here - don't execute the rest
+else
+    # Normal execution path - only runs when NOT sourced
+    # Set strict mode only when executing (not sourcing)
+    set -uo pipefail
+
+# Detect script name
+SCRIPT_NAME=$(basename "$SCRIPT_PATH")
+TOOL_NAME="${SCRIPT_NAME}"
+
+# Resolve project root (directory where this script lives)
+PROJECT_ROOT="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+
+# Detect OS and architecture
+detect_platform() {
+    local os
+    local arch
+    local ext
+    
+    case "$(uname -s)" in
+        Darwin)
+            os="darwin"
+            ;;
+        Linux)
+            os="linux"
+            ;;
+        *)
+            echo "${TOOL_NAME} ERROR: Unsupported OS: $(uname -s)" >&2
+            exit 1
+            ;;
+    esac
+    
+    case "$(uname -m)" in
+        x86_64)
+            arch="x64"
+            ;;
+        arm64|aarch64)
+            arch="arm64"
+            ;;
+        *)
+            echo "${TOOL_NAME} ERROR: Unsupported architecture: $(uname -m)" >&2
+            exit 1
+            ;;
+    esac
+    
+    if [ "$os" = "linux" ]; then
+        ext="tar.xz"
+    else
+        ext="tar.gz"
+    fi
+    
+    echo "$os|$arch|$ext"
+}
+
+# Get platform info
+PLATFORM_INFO=$(detect_platform)
+OS=$(echo "$PLATFORM_INFO" | cut -d'|' -f1)
+ARCH=$(echo "$PLATFORM_INFO" | cut -d'|' -f2)
+EXT=$(echo "$PLATFORM_INFO" | cut -d'|' -f3)
+
+# Directories (keep .pnenv as internal implementation detail)
+PNENV_DIR="$PROJECT_ROOT/.pnenv"
+CACHE_DIR="$PNENV_DIR/cache"
+SHARED_CACHE_DIR="$HOME/.pnenv/cache"
+VERSION_FILE="$PROJECT_ROOT/.pnenv-version"
+ALIASES_FILE="$PROJECT_ROOT/.pnenv-aliases"
+
+# Check if curl or wget is available
+check_downloader() {
+    if command -v curl >/dev/null 2>&1; then
+        echo "curl"
+    elif command -v wget >/dev/null 2>&1; then
+        echo "wget"
+    else
+        echo "${TOOL_NAME} ERROR: Neither curl nor wget found. Please install one." >&2
+        exit 1
+    fi
+}
+
+DOWNLOADER=$(check_downloader)
+
+# Download file
+download_file() {
+    local url="$1"
+    local output="$2"
+    
+    mkdir -p "$(dirname "$output")"
+    
+    if [ "$DOWNLOADER" = "curl" ]; then
+        curl -L -f -o "$output" "$url" || return 1
+    else
+        wget -O "$output" "$url" || return 1
+    fi
+}
+
+# Extract archive
+extract_archive() {
+    local archive="$1"
+    local dest="$2"
+    
+    mkdir -p "$dest"
+    
+    if [ "$EXT" = "tar.xz" ]; then
+        tar -xJf "$archive" -C "$dest" --strip-components=1 || return 1
+    else
+        tar -xzf "$archive" -C "$dest" --strip-components=1 || return 1
+    fi
+}
+
+# Parse package.json for engines.node
+detect_version_from_package_json() {
+    local pkg_json="$PROJECT_ROOT/package.json"
+    
+    if [ ! -f "$pkg_json" ]; then
+        return 1
+    fi
+    
+    # Try to extract engines.node using grep/sed (works without jq)
+    local engines_node
+    engines_node=$(grep -E '"node"\s*:' "$pkg_json" 2>/dev/null | head -1 | sed -E 's/.*"node"\s*:\s*"([^"]+)".*/\1/' || echo "")
+    
+    if [ -z "$engines_node" ]; then
+        return 1
+    fi
+    
+    # Extract version number (handle >=, ~, ^, etc.)
+    local version
+    version=$(echo "$engines_node" | sed -E 's/[^0-9]*([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+    
+    if [ -n "$version" ]; then
+        echo "$version"
+        return 0
+    fi
+    
+    return 1
+}
+
+# Check shared cache
+check_shared_cache() {
+    local version="$1"
+    local cache_file="$SHARED_CACHE_DIR/node-v${version}-${OS}-${ARCH}.${EXT}"
+    
+    if [ -f "$cache_file" ]; then
+        echo "$cache_file"
+        return 0
+    fi
+    
+    return 1
+}
+
+# Get alias
+get_alias() {
+    local alias_name="$1"
+    if [ -f "$ALIASES_FILE" ]; then
+        grep -E "^${alias_name}=" "$ALIASES_FILE" 2>/dev/null | cut -d'=' -f2- | head -1
+    fi
+}
+
+# Usage
+usage() {
+    cat << EOF
+
+${TOOL_NAME} - per-project Node.js version manager
+----------------------------------------
+Usage:
+  ${TOOL_NAME} init [version]           Initialize .pnenv for this project
+  ${TOOL_NAME} use <version>             Switch to an installed Node version
+  ${TOOL_NAME} list                      Show installed Node versions
+  ${TOOL_NAME} current                   Show active Node version
+  ${TOOL_NAME} remove <version>          Remove a specific Node version
+  ${TOOL_NAME} node <args>               Use project-local Node
+  ${TOOL_NAME} npm <args>                Use project-local npm
+  ${TOOL_NAME} alias <name> <command>    Create a command alias
+  ${TOOL_NAME} unalias <name>            Remove an alias
+  ${TOOL_NAME} aliases                   List all aliases
+  ${TOOL_NAME} <script>                  Run npm script or alias
+
+EOF
+}
+
+# Initialize
+cmd_init() {
+    local version="$1"
+    local detected_version
+    
+    echo ""
+    echo "${TOOL_NAME}: initializing Node runtime inside this project..."
+    echo "Project: $PROJECT_ROOT"
+    echo ""
+    
+    # Auto-detect from package.json if no version provided
+    if [ -z "$version" ]; then
+        detected_version=$(detect_version_from_package_json)
+        if [ -n "$detected_version" ]; then
+            echo "${TOOL_NAME}: detected Node version from package.json: $detected_version"
+            read -p "Use this version? (Y/n): " confirm
+            if [[ "$confirm" =~ ^[Nn]$ ]]; then
+                read -p "Which Node.js version do you want? (default: 20.0.0): " version
+            else
+                version="$detected_version"
+            fi
+        else
+            read -p "Which Node.js version do you want? (default: 20.0.0): " version
+        fi
+    fi
+    
+    version="${version:-20.0.0}"
+    version=$(echo "$version" | xargs) # trim whitespace
+    
+    local runtime_dir="$PNENV_DIR/node-v${version}-${OS}-${ARCH}"
+    local cache_file="$CACHE_DIR/node-v${version}-${OS}-${ARCH}.${EXT}"
+    local node_url="https://nodejs.org/dist/v${version}/node-v${version}-${OS}-${ARCH}.${EXT}"
+    
+    mkdir -p "$PNENV_DIR"
+    mkdir -p "$CACHE_DIR"
+    
+    # Check if already installed
+    if [ -f "$runtime_dir/bin/node" ]; then
+        echo "${TOOL_NAME}: Node $version already installed."
+        echo "$version" > "$VERSION_FILE"
+        
+        echo ""
+        echo "${TOOL_NAME}: Installed Node $version inside:"
+        echo "  $runtime_dir"
+        echo ""
+        echo "Try:"
+        echo "  ${TOOL_NAME} use $version"
+        echo "  ${TOOL_NAME} node --version"
+        echo ""
+        exit 0
+    fi
+    
+    # Check shared cache first
+    local shared_cache_file
+    if shared_cache_file=$(check_shared_cache "$version"); then
+        echo "${TOOL_NAME}: found Node $version in shared cache, copying..."
+        cp "$shared_cache_file" "$cache_file"
+    else
+        echo "${TOOL_NAME}: downloading Node $version ..."
+        echo "  URL: $node_url"
+        echo ""
+        
+        # Download with retry
+        local retries=3
+        local retry=0
+        while [ $retry -lt $retries ]; do
+            if download_file "$node_url" "$cache_file"; then
+                break
+            fi
+            retry=$((retry + 1))
+            if [ $retry -lt $retries ]; then
+                echo "${TOOL_NAME}: download failed, retrying ($retry/$retries)..."
+                sleep 2
+            else
+                echo ""
+                echo "${TOOL_NAME} ERROR: Failed to download Node after $retries attempts." >&2
+                exit 1
+            fi
+        done
+        
+        # Copy to shared cache if possible
+        if mkdir -p "$SHARED_CACHE_DIR" 2>/dev/null; then
+            cp "$cache_file" "$SHARED_CACHE_DIR/" 2>/dev/null || true
+        fi
+    fi
+    
+    echo "${TOOL_NAME}: extracting..."
+    if ! extract_archive "$cache_file" "$runtime_dir" 2>/dev/null; then
+        echo ""
+        echo "${TOOL_NAME} ERROR: Failed to extract Node archive." >&2
+        exit 1
+    fi
+    
+    # Verify extraction succeeded
+    if [ ! -f "$runtime_dir/bin/node" ]; then
+        echo ""
+        echo "${TOOL_NAME} ERROR: Node binary not found after extraction." >&2
+        exit 1
+    fi
+    
+    echo "$version" > "$VERSION_FILE"
+    
+    # Update .gitignore
+    if [ ! -f "$PROJECT_ROOT/.gitignore" ]; then
+        echo "# Ignore local Node runtimes" > "$PROJECT_ROOT/.gitignore"
+    fi
+    grep -q "^\.pnenv/" "$PROJECT_ROOT/.gitignore" 2>/dev/null || echo ".pnenv/" >> "$PROJECT_ROOT/.gitignore"
+    grep -q "^\.pnenv-version" "$PROJECT_ROOT/.gitignore" 2>/dev/null || echo ".pnenv-version" >> "$PROJECT_ROOT/.gitignore"
+    grep -q "^\.pnenv-aliases" "$PROJECT_ROOT/.gitignore" 2>/dev/null || echo ".pnenv-aliases" >> "$PROJECT_ROOT/.gitignore"
+    
+    echo ""
+    echo "${TOOL_NAME}: Installed Node $version inside:"
+    echo "  $runtime_dir"
+    echo ""
+    echo "Try:"
+    echo "  ${TOOL_NAME} use $version"
+    echo "  ${TOOL_NAME} node --version"
+    echo ""
+}
+
+# Use version
+cmd_use() {
+    local version="$1"
+    local no_install="${2:-}"
+    
+    if [ -z "$version" ]; then
+        echo "Usage: ${TOOL_NAME} use <version> [--no-install]" >&2
+        exit 1
+    fi
+    
+    local runtime_dir="$PNENV_DIR/node-v${version}-${OS}-${ARCH}"
+    
+    if [ ! -f "$runtime_dir/bin/node" ]; then
+        echo "${TOOL_NAME} ERROR: Node $version is not installed." >&2
+        echo "Run: ${TOOL_NAME} init $version first." >&2
+        exit 1
+    fi
+    
+    echo "$version" > "$VERSION_FILE"
+    echo "${TOOL_NAME}: switched to Node $version"
+    
+    # Auto npm install
+    if [ "$no_install" != "--no-install" ]; then
+        local pkg_json="$PROJECT_ROOT/package.json"
+        local node_modules="$PROJECT_ROOT/node_modules"
+        
+        if [ -f "$pkg_json" ]; then
+            if [ ! -d "$node_modules" ] || [ "$pkg_json" -nt "$node_modules" ]; then
+                echo "${TOOL_NAME}: running npm install..."
+                "$runtime_dir/bin/npm" install
+            fi
+        fi
+    fi
+}
+
+# List versions
+cmd_list() {
+    echo "Installed Node versions in this project:"
+    local current_version
+    if [ -f "$VERSION_FILE" ]; then
+        current_version=$(cat "$VERSION_FILE" | xargs)
+    fi
+    
+    for dir in "$PNENV_DIR"/node-v*; do
+        if [ -d "$dir" ] && [ -f "$dir/bin/node" ]; then
+            local ver
+            ver=$(basename "$dir" | sed -E 's/node-v([^-]+)-.*/\1/')
+            if [ "$ver" = "$current_version" ]; then
+                echo "  * $ver"
+            else
+                echo "    $ver"
+            fi
+        fi
+    done
+}
+
+# Current version
+cmd_current() {
+    if [ -f "$VERSION_FILE" ]; then
+        local version
+        version=$(cat "$VERSION_FILE" | xargs)
+        echo "Current Node version: $version"
+    else
+        echo "${TOOL_NAME}: no active version. Run ${TOOL_NAME} init or use." >&2
+        exit 1
+    fi
+}
+
+# Remove version
+cmd_remove() {
+    local version="$1"
+    
+    if [ -z "$version" ]; then
+        echo "Usage: ${TOOL_NAME} remove <version>" >&2
+        exit 1
+    fi
+    
+    local remove_dir="$PNENV_DIR/node-v${version}-${OS}-${ARCH}"
+    
+    if [ ! -f "$remove_dir/bin/node" ]; then
+        echo "${TOOL_NAME} ERROR: Node $version is not installed." >&2
+        exit 1
+    fi
+    
+    echo "${TOOL_NAME}: removing Node $version ..."
+    rm -rf "$remove_dir"
+    
+    # If current version matches removed, clear .pnenv-version
+    if [ -f "$VERSION_FILE" ]; then
+        local curr
+        curr=$(cat "$VERSION_FILE" | xargs)
+        if [ "$curr" = "$version" ]; then
+            rm -f "$VERSION_FILE"
+            echo "${TOOL_NAME}: removed active version. Please run ${TOOL_NAME} use or init again."
+        fi
+    fi
+    
+    echo "${TOOL_NAME}: Node $version removed."
+}
+
+# Alias management
+cmd_alias() {
+    local name="$1"
+    local command="$2"
+    
+    if [ -z "$name" ] || [ -z "$command" ]; then
+        echo "Usage: ${TOOL_NAME} alias <name> <command>" >&2
+        exit 1
+    fi
+    
+    # Remove existing alias if present
+    if [ -f "$ALIASES_FILE" ]; then
+        grep -v "^${name}=" "$ALIASES_FILE" > "$ALIASES_FILE.tmp" 2>/dev/null || true
+        mv "$ALIASES_FILE.tmp" "$ALIASES_FILE" 2>/dev/null || true
+    fi
+    
+    # Add new alias
+    echo "${name}=${command}" >> "$ALIASES_FILE"
+    echo "${TOOL_NAME}: alias '$name' created"
+}
+
+cmd_unalias() {
+    local name="$1"
+    
+    if [ -z "$name" ]; then
+        echo "Usage: ${TOOL_NAME} unalias <name>" >&2
+        exit 1
+    fi
+    
+    if [ ! -f "$ALIASES_FILE" ]; then
+        echo "${TOOL_NAME}: no aliases defined." >&2
+        exit 1
+    fi
+    
+    if grep -q "^${name}=" "$ALIASES_FILE"; then
+        grep -v "^${name}=" "$ALIASES_FILE" > "$ALIASES_FILE.tmp"
+        mv "$ALIASES_FILE.tmp" "$ALIASES_FILE"
+        echo "${TOOL_NAME}: alias '$name' removed"
+    else
+        echo "${TOOL_NAME} ERROR: alias '$name' not found." >&2
+        exit 1
+    fi
+}
+
+cmd_aliases() {
+    if [ ! -f "$ALIASES_FILE" ]; then
+        echo "No aliases defined."
+        return 0
+    fi
+    
+    echo "Defined aliases:"
+    while IFS='=' read -r name command || [ -n "$name" ]; do
+        [[ "$name" =~ ^#.*$ ]] && continue
+        [[ -z "$name" ]] && continue
+        echo "  $name -> $command"
+    done < "$ALIASES_FILE"
+}
+
+# Run command
+cmd_run() {
+    # Load version
+    local version
+    if [ ! -f "$VERSION_FILE" ]; then
+        echo "${TOOL_NAME} ERROR: No .pnenv-version file found." >&2
+        echo "Run:" >&2
+        echo "  ${TOOL_NAME} init" >&2
+        echo "first." >&2
+        exit 1
+    fi
+    
+    version=$(cat "$VERSION_FILE" | xargs)
+    local runtime_dir="$PNENV_DIR/node-v${version}-${OS}-${ARCH}"
+    local node_exe="$runtime_dir/bin/node"
+    local npm_exe="$runtime_dir/bin/npm"
+    
+    if [ ! -f "$node_exe" ]; then
+        echo "${TOOL_NAME} ERROR: Node runtime missing:" >&2
+        echo "  $node_exe" >&2
+        echo "Run:" >&2
+        echo "  ${TOOL_NAME} init" >&2
+        exit 1
+    fi
+    
+    # Check for alias first
+    local first_arg="$1"
+    local alias_cmd
+    alias_cmd=$(get_alias "$first_arg")
+    
+    if [ -n "$alias_cmd" ]; then
+        # Execute alias command
+        eval "$alias_cmd" "${@:2}"
+        exit $?
+    fi
+    
+    # Check for node command
+    if [ "$first_arg" = "node" ]; then
+        exec "$node_exe" "${@:2}"
+    fi
+    
+    # Check for npm command
+    if [ "$first_arg" = "npm" ]; then
+        exec "$npm_exe" "${@:2}"
+    fi
+    
+    # Otherwise, treat as npm script
+    exec "$npm_exe" run "$@"
+}
+
+# Main command router
+main() {
+    # Handle 'help' command
+    if [ $# -eq 0 ] || [ "$1" = "help" ] || [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+        usage
+        if [ $# -eq 0 ]; then
+            exit 1
+        else
+            exit 0
+        fi
+    fi
+    
+    local command="$1"
+    shift || true
+    
+    case "$command" in
+        init)
+            cmd_init "${1:-}"
+            ;;
+        use)
+            cmd_use "${1:-}" "${2:-}"
+            ;;
+        list)
+            cmd_list
+            ;;
+        current)
+            cmd_current
+            ;;
+        remove)
+            cmd_remove "${1:-}"
+            ;;
+        alias)
+            cmd_alias "${1:-}" "${2:-}"
+            ;;
+        unalias)
+            cmd_unalias "${1:-}"
+            ;;
+        aliases)
+            cmd_aliases
+            ;;
+        *)
+            cmd_run "$command" "$@"
+            ;;
+    esac
+}
+
+    main "$@"
+fi

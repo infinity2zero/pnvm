@@ -1,0 +1,32 @@
+name: Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v2.0.0)'
+        required: true
+        type: string
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup zip
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip
+
+      - name: Package releases
+        run: |
+          ./package.sh "${{ github.event.inputs.version }}"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: release-packages
+          path: release/*.zip
+          retention-days: 30

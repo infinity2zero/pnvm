@@ -1,0 +1,12 @@
+# Ignore local Node runtimes
+.pnenv/
+.pnenv-version
+.pnenv-aliases
+
+# Release packages
+release/
+release-temp/
+
+# OS files
+.DS_Store
+Thumbs.db
