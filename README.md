@@ -5,6 +5,9 @@ A portable, zero-admin Node.js version manager that works entirely within your p
 **pnvm** = Per-project Node Version Manager (like `nvm`, but per-project)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![GitHub stars](https://img.shields.io/github/stars/infinity2zero/pnenv?style=social)](https://github.com/infinity2zero/pnenv/stargazers)
+
+> ⭐ **If you find this useful, please consider giving it a star!** It helps others discover the project and motivates continued development.
 
 ## Features
 
@@ -22,8 +25,8 @@ A portable, zero-admin Node.js version manager that works entirely within your p
 
 Download the appropriate package for your OS:
 
-- **From GitHub Releases**: [Releases page](https://github.com/infinity2zero/pnvm/releases)
-- **Direct download from repo**: [release folder](https://github.com/infinity2zero/pnvm/tree/main/release)
+- **From GitHub Releases**: [Releases page](https://github.com/infinity2zero/pnenv/releases)
+- **Direct download from repo**: [release folder](https://github.com/infinity2zero/pnenv/tree/main/release)
 
 Available packages:
 - **Universal** (all platforms): `pnvm-v2.0.0-universal.zip`
@@ -456,7 +459,7 @@ chmod +x pnvm
 ## Download Statistics
 
 GitHub automatically tracks download counts for each release. View statistics at:
-- [GitHub Releases](https://github.com/infinity2zero/pnvm/releases)
+- [GitHub Releases](https://github.com/infinity2zero/pnenv/releases)
 
 Each release shows download counts for:
 - Universal package (all platforms)
@@ -470,3 +473,17 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Contributing
 
 Feel free to submit issues or improvements. This tool is designed to be simple and portable.
+
+## Support
+
+If `pnvm` has helped you overcome corporate laptop restrictions, consider:
+
+- ⭐ **Starring the repository** - Helps others discover this tool
+- 🐛 **Reporting issues** - Help improve the project
+- 💡 **Suggesting features** - Share your ideas
+
+---
+
+**Developed by [infinity2zero](https://github.com/infinity2zero) with ❤️ , caffeine, and mild resentment toward corporate laptops.**
+
+*Because sometimes you just need Node.js — not a ticket, a meeting, or admin rights.*
