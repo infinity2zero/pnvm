@@ -66,18 +66,18 @@ goto :eof
 
 REM Parse package.json for engines.node
 :detect_version_from_package_json
+set "DETECTED_VERSION="
 set "PKG_JSON=%PROJECT_ROOT%\package.json"
 if not exist "%PKG_JSON%" exit /b 1
 
-REM Use PowerShell to parse JSON
-for /f "tokens=*" %%V in ('powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$json = Get-Content '%PKG_JSON%' | ConvertFrom-Json; ^
-   if ($json.engines -and $json.engines.node) { ^
-     $version = $json.engines.node -replace '[^0-9.]', ''; ^
-     if ($version -match '^\d+\.\d+\.\d+') { Write-Output $matches[0] } ^
-   }"') do (
-    set "DETECTED_VERSION=%%V"
-    exit /b 0
+REM Use PowerShell to parse JSON - output to temp file to avoid parsing issues
+set "TEMP_VERSION_FILE=%TEMP%\pnvm_version_%RANDOM%.txt"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $json = Get-Content '%PKG_JSON%' -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop; if ($json.engines -and $json.engines.node) { $version = $json.engines.node -replace '[^0-9.]', ''; if ($version -match '^\d+\.\d+\.\d+') { $matches[0] | Out-File -FilePath '%TEMP_VERSION_FILE%' -Encoding ASCII -NoNewline } } } catch { }" >nul 2>&1
+
+if exist "%TEMP_VERSION_FILE%" (
+    set /p DETECTED_VERSION=<"%TEMP_VERSION_FILE%"
+    del "%TEMP_VERSION_FILE%" >nul 2>&1
+    if defined DETECTED_VERSION exit /b 0
 )
 exit /b 1
 
@@ -107,6 +107,7 @@ set "pnenv_VERSION=%~2"
 
 REM Auto-detect from package.json if no version provided
 if "%pnenv_VERSION%"=="" (
+    set "DETECTED_VERSION="
     call :detect_version_from_package_json
     if defined DETECTED_VERSION (
         echo %TOOL_NAME%: detected Node version from package.json: !DETECTED_VERSION!
