@@ -110,7 +110,7 @@ if "%pnenv_VERSION%"=="" (
     call :detect_version_from_package_json
     if defined DETECTED_VERSION (
         echo %TOOL_NAME%: detected Node version from package.json: !DETECTED_VERSION!
-        set /p CONFIRM=Use this version? (Y/n): 
+        set /p CONFIRM="Use this version? (Y/n): "
         if /I "!CONFIRM!"=="n" (
             set "DETECTED_VERSION="
         ) else (
@@ -120,7 +120,7 @@ if "%pnenv_VERSION%"=="" (
 )
 
 if "%pnenv_VERSION%"=="" (
-    set /p pnenv_VERSION=Which Node.js version do you want? (default: %DEFAULT_VERSION%): 
+    set /p "pnenv_VERSION=Which Node.js version do you want? (default: %DEFAULT_VERSION%): "
 )
 
 if "%pnenv_VERSION%"=="" set "pnenv_VERSION=%DEFAULT_VERSION%"

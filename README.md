@@ -68,7 +68,7 @@ pnvm help
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `pnvm init [version]` | Initialize pnvm in project. Auto-detects from `package.json` if no version specified | `pnvm init 20.0.0` |
+| `pnvm init [version]` | Initialize pnvm in project. Auto-detects from `package.json` if no version specified. If no `package.json` exists, prompts for version (defaults to 20.0.0) | `pnvm init 20.0.0` |
 | `pnvm use <version>` | Switch to Node version. Auto-runs `npm install` unless `--no-install` flag used | `pnvm use 20.0.0` |
 | `pnvm list` | Show installed Node versions (active marked with `*`) | `pnvm list` |
 | `pnvm current` | Show active Node version | `pnvm current` |
